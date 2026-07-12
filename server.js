@@ -124,6 +124,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Ручной/автоматический ресинк (например, после того как вкладка была
+  // свёрнута/в фоне и клиент мог "заснуть" и разойтись по времени) —
+  // просто ещё раз присылаем текущее состояние, без системного сообщения о входе.
+  socket.on('request-sync', ({ room }) => {
+    if (!room) return;
+    const state = roomState[room];
+    if (state && state.url) {
+      socket.emit('room-state', {
+        url: state.url,
+        sourceType: state.sourceType,
+        isPlaying: state.isPlaying,
+        time: effectiveTime(state)
+      });
+    }
+  });
+
   socket.on('chat-message', ({ room, name, text }) => {
     if (!room || !text) return;
     io.to(room).emit('chat-message', { name: name || 'Гость', text: String(text).slice(0, 500) });

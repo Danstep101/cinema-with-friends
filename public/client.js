@@ -2,7 +2,8 @@ const socket = io();
 
 let room = null;
 let name = null;
-let isRemoteAction = false; // защита от эхо-цикла при синхронизации
+let suppressCount = 0;     // счётчик "ожидаемых эхо" от удалённых команд (защита от петли синхронизации)
+let suppressResetTimer = null;
 let currentPlayer = null;   // текущий адаптер плеера (file / youtube / vk / rutube)
 let lastKnownTime = 0;
 
@@ -217,16 +218,31 @@ function detectSource(raw) {
 // =====================================================================
 
 const playerHandlers = {
-  onPlay: (time) => { if (!isRemoteAction) socket.emit('play', { room, time }); },
-  onPause: (time) => { if (!isRemoteAction) socket.emit('pause', { room, time }); },
-  onSeek: (time) => { if (!isRemoteAction) socket.emit('seek', { room, time }); },
+  onPlay: (time) => { hideResumeOverlay(); if (consumeSuppression()) return; socket.emit('play', { room, time }); },
+  onPause: (time) => { if (consumeSuppression()) return; socket.emit('pause', { room, time }); },
+  onSeek: (time) => { if (consumeSuppression()) return; socket.emit('seek', { room, time }); },
   onTimeUpdate: (time) => { lastKnownTime = time; }
 };
 
-function withRemoteGuard(fn) {
-  isRemoteAction = true;
-  fn();
-  setTimeout(() => { isRemoteAction = false; }, 350);
+// ---- Защита от эхо-цикла синхронизации ----
+// Раньше здесь была защита по таймеру (350мс): если событие от площадки
+// (YouTube/RuTube/VK) приходило позже — например, из-за буферизации при
+// перемотке — оно ошибочно принималось за собственное действие зрителя
+// и повторно рассылалось всем, вызывая бесконечные скачки play/pause.
+// Теперь вместо таймера считаем ТОЧНОЕ количество ожидаемых эхо-событий:
+// каждое из onPlay/onPause/onSeek гасит ровно одно ожидание, независимо
+// от того, сколько времени это заняло. Таймер остался только как
+// подстраховка на случай, если ожидаемое событие вообще не пришло
+// (например, автовоспроизведение заблокировал браузер).
+function expectRemoteEcho(count) {
+  suppressCount += count;
+  clearTimeout(suppressResetTimer);
+  suppressResetTimer = setTimeout(() => { suppressCount = 0; }, 4000);
+}
+
+function consumeSuppression() {
+  if (suppressCount > 0) { suppressCount--; return true; }
+  return false;
 }
 
 function createFilePlayer(container, url, handlers) {
@@ -245,7 +261,8 @@ function createFilePlayer(container, url, handlers) {
     play: () => video.play().catch(() => {}),
     pause: () => video.pause(),
     seekTo: (t) => { try { video.currentTime = t; } catch (e) {} },
-    getCurrentTime: () => video.currentTime || 0
+    getCurrentTime: () => video.currentTime || 0,
+    isPaused: () => video.paused
   };
 }
 
@@ -280,7 +297,8 @@ async function createYouTubePlayer(container, videoId, handlers) {
             play: () => player.playVideo(),
             pause: () => player.pauseVideo(),
             seekTo: (t) => player.seekTo(t, true),
-            getCurrentTime: () => { try { return player.getCurrentTime() || 0; } catch (e) { return 0; } }
+            getCurrentTime: () => { try { return player.getCurrentTime() || 0; } catch (e) { return 0; } },
+            isPaused: () => { try { return player.getPlayerState() !== YT.PlayerState.PLAYING; } catch (e) { return false; } }
           });
         },
         onStateChange: (e) => {
@@ -292,53 +310,36 @@ async function createYouTubePlayer(container, videoId, handlers) {
   });
 }
 
-// VK: экспериментальная поддержка через postMessage JS API внешнего плеера VK.
-// Может не работать со всеми видео (зависит от настроек приватности видео в VK).
-let vkMessageListenerAttached = false;
-let vkLastTime = 0;
-
-function createVKPlayer(container, payload, handlers) {
+// VK: у VK НЕТ публичного API для управления встроенным плеером из JS
+// (проверено — официальной документации на такой postMessage-протокол не
+// существует, в отличие от YouTube и RuTube). Раньше здесь была попытка
+// самодельного "js_api=1" — она молча ничего не делала, отсюда и ощущение
+// "всё сломано" именно с VK-ссылками. Честная версия: показываем видео всем
+// одинаково (сам плеер встраивается официально), но play/pause/перемотку
+// внутри VK-плеера синхронизировать невозможно — зрителям нужно жать play
+// вручную примерно одновременно. Также VK Видео переехал на домен vkvideo.ru.
+function createVKPlayer(container, payload) {
   const [oid, id, hash] = payload.split('_');
-  const src = `https://vk.com/video_ext.php?oid=${oid}&id=${id}${hash ? `&hash=${hash}` : ''}&js_api=1`;
-  container.innerHTML = `<iframe id="vk-player" src="${src}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen frameborder="0"></iframe><div id="video-ticker" class="video-ticker" aria-live="polite"></div>`;
+  const src = `https://vkvideo.ru/video_ext.php?oid=${oid}&id=${id}${hash ? `&hash=${hash}` : ''}`;
+  container.innerHTML = `<iframe src="${src}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen frameborder="0"></iframe><div id="video-ticker" class="video-ticker" aria-live="polite"></div>`;
   rebindTickerEl();
-  const iframe = document.getElementById('vk-player');
 
-  function post(command, extra = {}) {
-    try {
-      iframe.contentWindow.postMessage(JSON.stringify({ command, ...extra }), '*');
-    } catch (e) {}
-  }
-
-  if (!vkMessageListenerAttached) {
-    vkMessageListenerAttached = true;
-    window.addEventListener('message', (event) => {
-      if (currentPlayer?.type !== 'vk' || typeof event.data !== 'string') return;
-      let data;
-      try { data = JSON.parse(event.data); } catch (e) { return; }
-      if (!data || !data.event) return;
-
-      if (data.event === 'playing' || data.event === 'started' || data.event === 'resumed') {
-        vkLastTime = data.time || vkLastTime;
-        handlers.onPlay(vkLastTime);
-      } else if (data.event === 'paused') {
-        vkLastTime = data.time || vkLastTime;
-        handlers.onPause(vkLastTime);
-      } else if (data.event === 'timeupdate') {
-        vkLastTime = data.time || vkLastTime;
-        handlers.onTimeUpdate(vkLastTime);
-      }
-    });
+  const statusEl = document.getElementById('upload-status');
+  if (statusEl) {
+    statusEl.textContent = hash
+      ? 'Видео из VK показано всем, но play/pause там не синхронизируются (у VK нет API для этого) — договоритесь нажать «play» одновременно.'
+      : 'В этой ссылке нет кода доступа (hash) — если видео не откроется, возьмите на VK «Поделиться → Код для вставки» и вставьте сюда целиком.';
   }
 
   return {
     type: 'vk',
-    play: () => post('play'),
-    pause: () => post('pause'),
-    seekTo: (t) => { vkLastTime = t; post('seek', { time: t }); },
-    getCurrentTime: () => vkLastTime
+    play: () => {},
+    pause: () => {},
+    seekTo: () => {},
+    getCurrentTime: () => 0
   };
 }
+
 
 // RuTube: экспериментальная поддержка через postMessage API встроенного плеера
 // RuTube (формат сообщений вида {type: "player:*", data: {...}}). Как и с VK,
@@ -370,9 +371,9 @@ function createRutubePlayer(container, id, handlers) {
       if (!data || !data.type) return;
 
       if (data.type === 'player:changeState') {
-        const status = data.data && data.data.status;
-        if (status === 'playing') handlers.onPlay(rutubeLastTime);
-        else if (status === 'paused') handlers.onPause(rutubeLastTime);
+        const state = data.data && data.data.state;
+        if (state === 'playing') handlers.onPlay(rutubeLastTime);
+        else if (state === 'paused' || state === 'pause') handlers.onPause(rutubeLastTime);
       } else if (data.type === 'player:currentTime') {
         rutubeLastTime = (data.data && data.data.time) || rutubeLastTime;
         handlers.onTimeUpdate(rutubeLastTime);
@@ -393,7 +394,7 @@ async function mountPlayer(sourceType, payload) {
   if (sourceType === 'youtube') {
     currentPlayer = await createYouTubePlayer(playerContainer, payload, playerHandlers);
   } else if (sourceType === 'vk') {
-    currentPlayer = createVKPlayer(playerContainer, payload, playerHandlers);
+    currentPlayer = createVKPlayer(playerContainer, payload);
   } else if (sourceType === 'rutube') {
     currentPlayer = createRutubePlayer(playerContainer, payload, playerHandlers);
   } else {
@@ -412,8 +413,10 @@ document.getElementById('set-url-btn').addEventListener('click', () => {
   socket.emit('set-video', { room, url: payload, sourceType });
 
   const statusEl = document.getElementById('upload-status');
-  if (sourceType === 'vk' || sourceType === 'rutube') {
-    statusEl.textContent = `Ссылка распознана как ${sourceType === 'vk' ? 'VK' : 'RuTube'} — синхронизация play/pause/перемотки тут экспериментальная (зависит от плеера площадки). Если у кого-то не совпадает время — надёжнее «Загрузить файл».`;
+  if (sourceType === 'vk') {
+    statusEl.textContent = 'Ссылка распознана как VK — у VK нет API для управления плеером, поэтому play/pause/перемотка НЕ синхронизируются, только сам просмотр. Договоритесь нажимать play вручную.';
+  } else if (sourceType === 'rutube') {
+    statusEl.textContent = 'Ссылка распознана как RuTube — синхронизация play/pause/перемотки экспериментальная (зависит от версии плеера площадки). Если разъезжается — надёжнее «Загрузить файл».';
   } else {
     statusEl.textContent = '';
   }
@@ -457,28 +460,83 @@ socket.on('video-source', async ({ url, sourceType }) => {
 socket.on('room-state', async ({ url, sourceType, isPlaying, time }) => {
   if (!url) return;
   await mountPlayer(sourceType, url);
-  withRemoteGuard(() => {
-    currentPlayer.seekTo(time || 0);
-    if (isPlaying) currentPlayer.play(); else currentPlayer.pause();
-  });
+  expectRemoteEcho(2);
+  currentPlayer.seekTo(time || 0);
+  if (isPlaying) attemptRemotePlay(); else currentPlayer.pause();
 });
 
 socket.on('play', ({ time }) => {
-  withRemoteGuard(() => {
-    if (currentPlayer) { currentPlayer.seekTo(time); currentPlayer.play(); }
-  });
+  expectRemoteEcho(2);
+  if (currentPlayer) attemptRemotePlay(time);
 });
 
 socket.on('pause', ({ time }) => {
-  withRemoteGuard(() => {
-    if (currentPlayer) { currentPlayer.seekTo(time); currentPlayer.pause(); }
-  });
+  expectRemoteEcho(2);
+  if (currentPlayer) { currentPlayer.seekTo(time); currentPlayer.pause(); }
+  hideResumeOverlay();
 });
 
 socket.on('seek', ({ time }) => {
-  withRemoteGuard(() => {
-    if (currentPlayer) currentPlayer.seekTo(time);
-  });
+  expectRemoteEcho(1);
+  if (currentPlayer) currentPlayer.seekTo(time);
+});
+
+// ---- Восстановление после блокировки автовоспроизведения браузером ----
+// Некоторые браузеры (особенно мобильные) молча блокируют программный play(),
+// если решат, что это не связано с действием пользователя. Раньше это выглядело
+// как "у друга видео просто не играет и непонятно почему". Теперь через 1.2с
+// после команды на воспроизведение проверяем, реально ли видео идёт — и если
+// нет, показываем кнopку, по клику на которую это уже точный жест пользователя,
+// так что play() гарантированно сработает.
+let autoplayCheckTimer = null;
+const resumeOverlayEl = document.getElementById('resume-overlay');
+
+function attemptRemotePlay(time) {
+  if (!currentPlayer) return;
+  if (typeof time === 'number') currentPlayer.seekTo(time);
+  currentPlayer.play();
+  clearTimeout(autoplayCheckTimer);
+  autoplayCheckTimer = setTimeout(() => {
+    if (currentPlayer && currentPlayer.isPaused && currentPlayer.isPaused()) {
+      showResumeOverlay();
+    }
+  }, 1200);
+}
+
+function showResumeOverlay() {
+  if (resumeOverlayEl) resumeOverlayEl.classList.remove('hidden');
+}
+
+function hideResumeOverlay() {
+  clearTimeout(autoplayCheckTimer);
+  if (resumeOverlayEl) resumeOverlayEl.classList.add('hidden');
+}
+
+resumeOverlayEl?.addEventListener('click', () => {
+  if (currentPlayer) currentPlayer.play(); // это уже прямой клик пользователя — сработает точно
+  hideResumeOverlay();
+});
+
+// ---- Ручная и автоматическая пересинхронизация ----
+// Если вкладка долго была в фоне (телефон, свернутый браузер), таймеры и видео
+// могли "заснуть" и разойтись по времени. При возврате на вкладку и по кнопке
+// запрашиваем у сервера актуальное состояние заново.
+function requestResync() {
+  if (room) socket.emit('request-sync', { room });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestResync();
+});
+
+document.getElementById('resync-btn')?.addEventListener('click', requestResync);
+
+// Переподключение сокета (обрыв связи/сон вкладки) — иначе комната навсегда
+// "забывает" про этого зрителя до перезагрузки страницы.
+socket.on('connect', () => {
+  if (room && name) {
+    socket.emit('join-room', { room, name });
+  }
 });
 
 // Держим currentTime свежим на сервере, чтобы те, кто подключится позже, попали в нужный момент

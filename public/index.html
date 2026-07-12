@@ -80,14 +80,18 @@
         </button>
       </div>
       <button id="fullscreen-btn" class="link-btn" title="Во весь экран">⛶ На весь экран</button>
+      <button id="resync-btn" class="link-btn" title="Пересинхронизировать видео">🔄 Синхронизировать</button>
     </header>
 
     <div class="hall" id="hall">
       <div class="screen-area">
-        <div id="player-container" class="player-container">
-          <video id="video" controls playsinline></video>
+        <div class="player-stage">
+          <div id="player-container" class="player-container">
+            <video id="video" controls playsinline></video>
 
-          <div id="video-ticker" class="video-ticker" aria-live="polite"></div>
+            <div id="video-ticker" class="video-ticker" aria-live="polite"></div>
+          </div>
+          <button id="resume-overlay" class="resume-overlay hidden" type="button">▶ Нажми, чтобы продолжить</button>
         </div>
 
         <div class="reel-controls">
