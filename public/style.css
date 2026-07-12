@@ -1,0 +1,801 @@
+:root {
+  --void: #0b0c10;
+  --curtain: #1a0f14;
+  --velvet: #6e1423;
+  --marquee-gold: #d4af37;
+  --marquee-gold-soft: #f7e7b4;
+  --screen-glow: #f4e9d8;
+  --ash: #8a8590;
+  --text: #f1ece4;
+  --glass-bg: rgba(36, 19, 25, 0.45);
+  --glass-border: rgba(247, 231, 180, 0.22);
+  --danger: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--void);
+  color: var(--text);
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  overflow-x: hidden;
+}
+
+.hidden { display: none !important; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- Анимированный фон "аврора" ---- */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 15%, rgba(110, 20, 35, 0.35), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 85% 20%, rgba(212, 175, 55, 0.12), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 50% 100%, rgba(110, 20, 35, 0.25), transparent 65%);
+  filter: blur(40px);
+  animation: aurora-shift 18s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-shift {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-2%, 2%) scale(1.08); }
+  100% { transform: translate(2%, -1%) scale(1.03); }
+}
+
+/* ---- Мягкие светящиеся "боке" за карточкой входа ---- */
+.glass-blobs {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: blob-float 14s ease-in-out infinite;
+}
+.blob.b1 {
+  width: 340px; height: 340px;
+  top: 8%; left: 8%;
+  background: radial-gradient(circle, rgba(212,175,55,0.4), transparent 70%);
+  animation-duration: 16s;
+}
+.blob.b2 {
+  width: 420px; height: 420px;
+  bottom: -5%; right: 5%;
+  background: radial-gradient(circle, rgba(110,20,35,0.5), transparent 70%);
+  animation-duration: 20s;
+  animation-delay: -4s;
+}
+.blob.b3 {
+  width: 260px; height: 260px;
+  bottom: 15%; left: 25%;
+  background: radial-gradient(circle, rgba(247,231,180,0.25), transparent 70%);
+  animation-duration: 12s;
+  animation-delay: -8s;
+}
+@keyframes blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(4%, -6%) scale(1.08); }
+  66%      { transform: translate(-3%, 5%) scale(0.95); }
+}
+
+.screen {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ---- Экран входа ---- */
+#join-screen {
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  animation: fade-in 0.6s ease both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.marquee {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.bulb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--marquee-gold);
+  box-shadow: 0 0 8px 2px rgba(212, 175, 55, 0.7);
+  animation: flicker 1.6s infinite ease-in-out;
+}
+.bulb:nth-child(odd) { animation-delay: 0.3s; }
+.bulb:nth-child(3n) { animation-delay: 0.6s; }
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.logo {
+  font-family: 'Georgia', serif;
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  letter-spacing: 0.35em;
+  margin: 0;
+  background: linear-gradient(180deg, var(--marquee-gold-soft), var(--marquee-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 30px rgba(212, 175, 55, 0.25);
+}
+
+.tagline {
+  color: var(--ash);
+  font-style: italic;
+  margin-top: 4px;
+  margin-bottom: 44px;
+}
+
+/* ---- Карточка входа: glassmorphism ---- */
+.ticket {
+  width: min(400px, 90vw);
+  position: relative;
+  padding: 44px 32px 32px;
+  border-radius: 22px;
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 25px 70px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(212, 175, 55, 0.06);
+  animation: ticket-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  transform-origin: center bottom;
+  perspective: 800px;
+}
+
+@keyframes ticket-in {
+  from { opacity: 0; transform: translateY(26px) scale(0.94) rotateX(6deg); }
+  to   { opacity: 1; transform: translateY(0) scale(1) rotateX(0); }
+}
+
+.ticket.shake { animation: ticket-shake 0.45s ease; }
+@keyframes ticket-shake {
+  10%, 90% { transform: translateX(-3px); }
+  20%, 80% { transform: translateX(5px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+
+/* Плавающая иконка-аватар над карточкой */
+.ticket-avatar {
+  position: absolute;
+  top: -42px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 35% 30%, var(--marquee-gold-soft), var(--marquee-gold) 70%);
+  color: #241319;
+  box-shadow:
+    0 8px 26px rgba(212, 175, 55, 0.45),
+    0 0 0 6px rgba(212, 175, 55, 0.1),
+    0 0 0 1px rgba(247, 231, 180, 0.5);
+  animation: avatar-float 4.5s ease-in-out infinite;
+}
+.ticket-avatar svg { width: 40px; height: 40px; }
+
+@keyframes avatar-float {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(-6px); }
+}
+
+.ticket-heading {
+  margin: 20px 0 22px;
+  font-size: 0.78rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--marquee-gold-soft);
+  opacity: 0.85;
+}
+
+.field-error {
+  color: var(--danger);
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  margin: 0 0 16px;
+  animation: fade-in 0.25s ease both;
+}
+
+.invite-banner {
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-bottom: 18px;
+  animation: fade-in 0.4s ease both;
+}
+.invite-banner b { color: var(--marquee-gold); letter-spacing: 0.05em; }
+
+/* ---- Поля с плавающим лейблом (как на референсе входа) ---- */
+.field {
+  position: relative;
+  margin-bottom: 26px;
+  text-align: left;
+}
+.field input[type="text"] {
+  width: 100%;
+  padding: 10px 30px 10px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(247, 231, 180, 0.35);
+  color: var(--text);
+  font-size: 1rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.25s ease;
+}
+.field input[type="text"]:focus {
+  border-bottom-color: var(--marquee-gold);
+}
+.field label {
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  color: var(--ash);
+  font-size: 0.95rem;
+  pointer-events: none;
+  transform-origin: left top;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.field input:focus + label,
+.field input:not(:placeholder-shown) + label {
+  transform: translateY(-20px) scale(0.78);
+  color: var(--marquee-gold-soft);
+}
+.field-icon {
+  position: absolute;
+  right: 2px;
+  top: 8px;
+  font-size: 1rem;
+  opacity: 0.7;
+}
+/* Плавная светящаяся линия под полем при фокусе */
+.field::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 100%;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--marquee-gold-soft), var(--marquee-gold));
+  transition: right 0.3s ease;
+}
+.field input:focus ~ .field-icon,
+.field input:focus {
+  right: 30px;
+}
+.field:has(input:focus)::after { right: 0; }
+
+.field-inline { margin-bottom: 0; flex: 1; }
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.code-entry {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+  margin-bottom: 22px;
+  animation: fade-in 0.3s ease both;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.15s ease;
+}
+button:active { transform: scale(0.96); }
+
+.primary-btn {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--marquee-gold-soft), var(--marquee-gold));
+  background-size: 200% 200%;
+  color: #241319;
+  border: none;
+  font-weight: 700;
+  padding: 13px;
+  border-radius: 10px;
+  font-size: 1rem;
+  letter-spacing: 0.03em;
+  animation: btn-glow 3.5s ease-in-out infinite;
+}
+.primary-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(212, 175, 55, 0.4);
+  background-position: 100% 0;
+}
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(212, 175, 55, 0); }
+  50% { box-shadow: 0 0 18px rgba(212, 175, 55, 0.25); }
+}
+
+.ghost-btn {
+  background: transparent;
+  color: var(--ash);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  padding: 11px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+.ghost-btn:hover {
+  color: var(--text);
+  border-color: var(--marquee-gold);
+  transform: translateY(-1px);
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: var(--ash);
+  margin-top: 16px;
+  line-height: 1.4;
+}
+
+/* ---- Экран зала ---- */
+#room-screen {
+  width: 100%;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+#room-screen.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+#join-screen.fade-out {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.hall-header {
+  width: 100%;
+  padding: 14px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(0,0,0,0.3);
+  border-bottom: 1px solid rgba(212,175,55,0.2);
+  backdrop-filter: blur(6px);
+  position: relative;
+  z-index: 5;
+}
+.hall-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.hall-title { font-size: 1rem; }
+.hall-title b { color: var(--marquee-gold); letter-spacing: 0.05em; }
+
+.link-btn {
+  background: rgba(212,175,55,0.1);
+  border: 1px solid rgba(212,175,55,0.3);
+  color: var(--marquee-gold-soft);
+  padding: 7px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.link-btn:hover {
+  background: rgba(212,175,55,0.2);
+  transform: translateY(-1px);
+}
+.link-btn.copied {
+  background: rgba(120, 200, 130, 0.2);
+  border-color: rgba(120, 200, 130, 0.5);
+  color: #a8e6ad;
+}
+
+.hall {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.screen-area {
+  flex: 3;
+  min-width: 300px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.player-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 70vh;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 60px rgba(212,175,55,0.12), 0 20px 40px rgba(0,0,0,0.6);
+  animation: fade-in 0.5s ease both;
+}
+.player-container video,
+.player-container iframe {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: none;
+  background: #000;
+  object-fit: contain;
+}
+
+/* ---- Тонкая "бегущая строка" сообщений под видео ---- */
+.video-ticker {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  pointer-events: none;
+  z-index: 4;
+}
+.ticker-msg {
+  align-self: flex-start;
+  max-width: min(86%, 520px);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  background: linear-gradient(90deg, rgba(20, 12, 16, 0.75), rgba(20, 12, 16, 0.35));
+  border-left: 2px solid var(--marquee-gold);
+  backdrop-filter: blur(6px);
+  animation: ticker-slide 4.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.ticker-msg .t-name {
+  color: var(--marquee-gold-soft);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ticker-msg .t-text {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes ticker-slide {
+  0%   { transform: translateY(140%); opacity: 0; }
+  10%  { transform: translateY(0); opacity: 1; }
+  85%  { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-6px); opacity: 0; }
+}
+
+.reel-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.reel-controls input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(212,175,55,0.3);
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+  transition: border-color 0.2s ease;
+}
+.reel-controls input:focus {
+  outline: none;
+  border-color: var(--marquee-gold);
+}
+#set-url-btn, .upload-btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: var(--marquee-gold);
+  color: #241319;
+  border: none;
+  font-weight: 700;
+}
+#set-url-btn:hover, .upload-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(212,175,55,0.3);
+}
+.upload-btn { display: inline-flex; align-items: center; }
+
+#upload-status {
+  font-size: 0.8rem;
+  color: var(--marquee-gold);
+  min-height: 1em;
+}
+
+/* ---- Чат: обычным режимом — просто видимая боковая панель.
+   Стрелка выдвижения появляется только в полноэкранном режиме (см. ниже),
+   потому что там панель перекрывала бы видео и её нужно прятать/показывать. ---- */
+.foyer {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
+}
+
+.foyer-inner {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0,0,0,0.25);
+  border-left: 1px solid rgba(212,175,55,0.2);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.foyer-head {
+  padding: 14px 16px 10px;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--marquee-gold-soft);
+  opacity: 0.8;
+  border-bottom: 1px solid rgba(212,175,55,0.15);
+}
+
+/* Стрелка-таб скрыта по умолчанию — видна только в полноэкранном режиме */
+.foyer-tab {
+  display: none;
+  position: absolute;
+  left: -38px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 68px;
+  border-radius: 12px 0 0 12px;
+  background: linear-gradient(135deg, var(--marquee-gold-soft), var(--marquee-gold));
+  border: none;
+  color: #241319;
+  align-items: center;
+  justify-content: center;
+  box-shadow: -6px 4px 18px rgba(0,0,0,0.35);
+  z-index: 21;
+}
+.foyer-tab-arrow {
+  font-size: 1.3rem;
+  font-weight: 900;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.foyer.open .foyer-tab-arrow { transform: rotate(180deg); }
+
+.foyer-tab:hover { filter: brightness(1.08); }
+.foyer-tab:active { transform: translateY(-50%) scale(0.94); }
+
+.unread-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--void);
+  animation: badge-pop 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+@keyframes badge-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-msg {
+  background: rgba(255,255,255,0.06);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  max-width: 90%;
+  align-self: flex-start;
+  animation: msg-in 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.chat-msg .msg-name {
+  color: var(--marquee-gold-soft);
+  font-weight: 700;
+}
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.system-msg {
+  font-size: 0.78rem;
+  color: var(--ash);
+  font-style: italic;
+  text-align: center;
+  animation: fade-in 0.3s ease both;
+}
+
+.chat-input {
+  display: flex;
+  border-top: 1px solid rgba(212,175,55,0.2);
+  padding: 12px;
+  gap: 8px;
+}
+.chat-input input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(212,175,55,0.3);
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+.chat-input input:focus {
+  outline: none;
+  border-color: var(--marquee-gold);
+}
+.chat-input button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--marquee-gold);
+  color: #241319;
+  border: none;
+  font-weight: 700;
+}
+.chat-input button:hover { transform: translateY(-1px); }
+
+/* ---- Полноэкранный режим ---- */
+.hall:fullscreen,
+.hall.is-fullscreen {
+  background: #000;
+}
+.hall:fullscreen .screen-area,
+.hall.is-fullscreen .screen-area {
+  padding: 0;
+  justify-content: center;
+}
+.hall:fullscreen .player-container,
+.hall.is-fullscreen .player-container {
+  max-height: 100vh;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+.hall:fullscreen .reel-controls,
+.hall:fullscreen #upload-status,
+.hall.is-fullscreen .reel-controls,
+.hall.is-fullscreen #upload-status {
+  display: none;
+}
+
+/* В полноэкранном режиме чат больше не сидит рядом постоянно (он бы перекрывал
+   видео) — превращаем его в выдвижную панель и показываем стрелку-таб. */
+.hall:fullscreen .foyer,
+.hall.is-fullscreen .foyer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(360px, 88vw);
+  min-width: 0;
+  z-index: 20;
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hall:fullscreen .foyer.open,
+.hall.is-fullscreen .foyer.open {
+  transform: translateX(0);
+}
+.hall:fullscreen .foyer-inner,
+.hall.is-fullscreen .foyer-inner {
+  background: rgba(10, 6, 9, 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-left: 1px solid rgba(212,175,55,0.25);
+  box-shadow: -16px 0 40px rgba(0,0,0,0.45);
+}
+.hall:fullscreen .foyer-tab,
+.hall.is-fullscreen .foyer-tab {
+  display: flex;
+}
+
+/* ---- Адаптив ---- */
+@media (max-width: 900px) {
+  .hall:fullscreen .foyer,
+  .hall.is-fullscreen .foyer { width: min(85vw, 340px); }
+
+  /* Обычный (не полноэкранный) режим на узких экранах: чат уезжает под видео */
+  .hall:not(.is-fullscreen):not(:fullscreen) {
+    flex-direction: column;
+  }
+  .hall:not(.is-fullscreen):not(:fullscreen) .foyer {
+    height: 45vh;
+    border-left: none;
+    border-top: 1px solid rgba(212,175,55,0.2);
+  }
+  .hall:not(.is-fullscreen):not(:fullscreen) .foyer-inner {
+    border-left: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .ticket { padding: 40px 20px 24px; }
+  .hall-header { padding: 10px 14px; }
+  .hall-title { font-size: 0.9rem; }
+  .screen-area { padding: 14px; }
+  .reel-controls { flex-direction: column; }
+  .reel-controls input { min-width: 0; }
+  #set-url-btn, .upload-btn { width: 100%; text-align: center; justify-content: center; }
+  .player-container { max-height: 40vh; }
+  .hall:fullscreen .foyer,
+  .hall.is-fullscreen .foyer { width: 88vw; }
+  .foyer-tab { width: 32px; height: 58px; left: -32px; }
+  .ticker-msg { font-size: 0.76rem; max-width: 92%; }
+}
+
+@supports (padding: max(0px)) {
+  .hall-header { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+}

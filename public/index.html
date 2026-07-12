@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0c10" />
+<title>Синема — смотрим вместе</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="glass-blobs" aria-hidden="true">
+    <span class="blob b1"></span>
+    <span class="blob b2"></span>
+    <span class="blob b3"></span>
+  </div>
+
+  <!-- Экран входа / создания комнаты -->
+  <section id="join-screen" class="screen">
+    <div class="marquee">
+      <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+      <span class="bulb"></span><span class="bulb"></span><span class="bulb"></span>
+    </div>
+    <h1 class="logo">СИНЕМА</h1>
+    <p class="tagline">Один сеанс. Разные диваны.</p>
+
+    <div class="ticket glass-card" id="ticket">
+      <div class="ticket-avatar">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 9.5L19.5 6l.8 3.9L4 13.5 3 9.5Z" fill="currentColor" opacity="0.9"/>
+          <path d="M3 9.5 4 13.5 21 10l-.5-2.5-2.7.6-2.4-2.1 2.4-.5-.4-1.8-16 3.3Z" fill="currentColor"/>
+          <rect x="4" y="13.5" width="16" height="7" rx="1.4" fill="currentColor"/>
+          <path d="M8 13.5l1.6 3M12 13.5l1.6 3M16 13.5l1.2 3" stroke="#150b10" stroke-width="1" opacity="0.5"/>
+        </svg>
+      </div>
+
+      <p class="ticket-heading">Вход в зал</p>
+
+      <div id="invite-banner" class="invite-banner hidden">
+        Тебя позвали в зал <b id="invite-code"></b>
+      </div>
+
+      <p id="join-error" class="field-error hidden"></p>
+
+      <div class="field">
+        <input id="name-input" type="text" placeholder=" " maxlength="40" autocomplete="off" />
+        <label for="name-input">Твоё имя</label>
+        <span class="field-icon">👤</span>
+      </div>
+
+      <div id="create-join-actions" class="actions">
+        <button id="create-btn" class="primary-btn">🎬 Создать комнату</button>
+        <button id="show-code-btn" class="ghost-btn">У меня есть код</button>
+      </div>
+
+      <div id="code-entry" class="code-entry hidden">
+        <div class="field field-inline">
+          <input id="room-input" type="text" placeholder=" " maxlength="12" autocomplete="off" />
+          <label for="room-input">Код комнаты</label>
+        </div>
+        <button id="join-code-btn" class="primary-btn">Войти</button>
+      </div>
+
+      <div id="invite-join-actions" class="actions hidden">
+        <button id="join-invite-btn" class="primary-btn">Войти в зал</button>
+      </div>
+
+      <p class="hint">Ссылку на комнату можно будет скопировать уже внутри — просто отправь её друзьям.</p>
+    </div>
+  </section>
+
+  <!-- Экран зала -->
+  <section id="room-screen" class="screen hidden">
+    <header class="hall-header">
+      <div class="hall-header-left">
+        <span class="hall-title">Зал <b id="current-room"></b></span>
+        <button id="copy-link-btn" class="link-btn" title="Скопировать ссылку-приглашение">
+          🔗 Скопировать ссылку
+        </button>
+      </div>
+      <button id="fullscreen-btn" class="link-btn" title="Во весь экран">⛶ На весь экран</button>
+    </header>
+
+    <div class="hall" id="hall">
+      <div class="screen-area">
+        <div id="player-container" class="player-container">
+          <video id="video" controls playsinline></video>
+
+          <div id="video-ticker" class="video-ticker" aria-live="polite"></div>
+        </div>
+
+        <div class="reel-controls">
+          <input id="video-url" type="text" placeholder="Ссылка: свой .mp4 / YouTube / VK / RuTube" />
+          <button id="set-url-btn">Показать</button>
+          <label class="upload-btn">
+            Загрузить файл
+            <input type="file" id="file-input" accept="video/*" hidden />
+          </label>
+        </div>
+        <div id="upload-status"></div>
+      </div>
+
+      <aside class="foyer" id="foyer">
+        <button id="foyer-tab" class="foyer-tab" aria-label="Открыть/закрыть чат">
+          <span class="foyer-tab-arrow">‹</span>
+          <span id="unread-badge" class="unread-badge hidden">0</span>
+        </button>
+
+        <div class="foyer-inner">
+          <div class="foyer-head">Чат зала</div>
+          <div id="messages" class="messages"></div>
+          <form id="chat-form" class="chat-input">
+            <input id="chat-text" type="text" placeholder="Шепнуть залу..." maxlength="500" autocomplete="off" />
+            <button type="submit">➤</button>
+          </form>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <input type="text" id="invite-link" class="visually-hidden" readonly tabindex="-1" />
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
