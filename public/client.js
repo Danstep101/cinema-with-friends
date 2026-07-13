@@ -245,6 +245,39 @@ function consumeSuppression() {
   return false;
 }
 
+// ---- Обнаружение перемотки по расхождению времени ----
+// Раньше синхронизация RuTube ловила только play/pause (через
+// player:changeState), а саму перемотку — нет: у RuTube нет отдельного
+// postMessage-события "перемотали". Из-за этого перемотка у одного зрителя
+// у остальных не появлялась вообще, а "чинилось" это только случайно —
+// потому что pause/play ЗАОДНО отправляют актуальное time. Здесь вместо
+// этого сравниваем, где видео "должно быть" по расчёту (предыдущее время +
+// прошедшие секунды, если играет) с тем, что реально прислал плеер. Если
+// разница больше порога — считаем это перемоткой и рассылаем её сразу же.
+function createSeekWatcher(handlers, thresholdSec = 1.5) {
+  let lastTime = null;
+  let lastTimestamp = null;
+  let playing = false;
+  return {
+    setPlaying(isPlaying) { playing = isPlaying; },
+    ingest(actualTime) {
+      const now = Date.now();
+      if (lastTime !== null) {
+        const expected = lastTime + (playing ? (now - lastTimestamp) / 1000 : 0);
+        if (Math.abs(actualTime - expected) > thresholdSec) {
+          handlers.onSeek(actualTime);
+        }
+      }
+      lastTime = actualTime;
+      lastTimestamp = now;
+    },
+    reset(time) {
+      lastTime = time;
+      lastTimestamp = Date.now();
+    }
+  };
+}
+
 function createFilePlayer(container, url, handlers) {
   container.innerHTML = '<video id="video" controls playsinline></video><div id="video-ticker" class="video-ticker" aria-live="polite"></div>';
   rebindTickerEl();
@@ -266,21 +299,38 @@ function createFilePlayer(container, url, handlers) {
   };
 }
 
+// Раньше, если скрипт iframe_api не загружался (заблокирован/подвисает у
+// конкретного зрителя — типичная ситуация с YouTube в РФ), Promise молча
+// висел вечно: mountPlayer() никогда не завершался, старый плеер (например,
+// RuTube) так и оставался на экране без единой ошибки — выглядело так,
+// будто "видео не переключилось на YouTube". Теперь у загрузки есть таймаут
+// и обработка ошибки скрипта, а сам промис при неудаче сбрасывается, чтобы
+// следующая попытка (пересинхронизация/повторная установка ссылки) могла
+// загрузиться заново, а не наследовать зависшую попытку.
 let ytApiReadyPromise = null;
 function loadYouTubeAPI() {
   if (ytApiReadyPromise) return ytApiReadyPromise;
-  ytApiReadyPromise = new Promise((resolve) => {
+  ytApiReadyPromise = new Promise((resolve, reject) => {
     if (window.YT && window.YT.Player) { resolve(); return; }
     const tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
+    tag.onerror = () => reject(new Error('yt-api-script-error'));
     document.head.appendChild(tag);
-    window.onYouTubeIframeAPIReady = () => resolve();
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { prevReady?.(); resolve(); };
+    setTimeout(() => reject(new Error('yt-api-timeout')), 8000);
   });
+  ytApiReadyPromise.catch(() => { ytApiReadyPromise = null; });
   return ytApiReadyPromise;
 }
 
-async function createYouTubePlayer(container, videoId, handlers) {
+// myGen — "поколение" вызова mountPlayer(): если пока мы ждали загрузку
+// YouTube API успел прийти ещё один более новый video-source (например,
+// быстро переключили ссылку дважды), эта попытка считается устаревшей и не
+// должна перетирать уже смонтированный актуальный плеер.
+async function createYouTubePlayer(container, videoId, handlers, myGen, isCurrentGen) {
   await loadYouTubeAPI();
+  if (!isCurrentGen(myGen)) return null;
   container.innerHTML = '<div id="yt-player"></div><div id="video-ticker" class="video-ticker" aria-live="polite"></div>';
   rebindTickerEl();
 
@@ -292,6 +342,7 @@ async function createYouTubePlayer(container, videoId, handlers) {
       playerVars: { playsinline: 1, rel: 0 },
       events: {
         onReady: () => {
+          if (!isCurrentGen(myGen)) { resolve(null); return; }
           resolve({
             type: 'youtube',
             play: () => player.playVideo(),
@@ -302,6 +353,7 @@ async function createYouTubePlayer(container, videoId, handlers) {
           });
         },
         onStateChange: (e) => {
+          if (!isCurrentGen(myGen)) return;
           if (e.data === YT.PlayerState.PLAYING) handlers.onPlay(player.getCurrentTime());
           else if (e.data === YT.PlayerState.PAUSED) handlers.onPause(player.getCurrentTime());
         }
@@ -353,6 +405,7 @@ function createRutubePlayer(container, id, handlers) {
   container.innerHTML = `<iframe id="rutube-player" src="${src}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen frameborder="0"></iframe><div id="video-ticker" class="video-ticker" aria-live="polite"></div>`;
   rebindTickerEl();
   const iframe = document.getElementById('rutube-player');
+  const seekWatcher = createSeekWatcher(handlers);
 
   function post(type, data = {}) {
     try {
@@ -360,6 +413,11 @@ function createRutubePlayer(container, id, handlers) {
     } catch (e) {}
   }
 
+  // Локальная перемотка (через seekTo, вызванную по команде с сервера) не
+  // должна детектиться watcher'ом как "новая" перемотка этого зрителя —
+  // иначе получится эхо. consumeSuppression() в onSeek уже гасит эти случаи,
+  // поэтому watcher.reset() здесь просто не даёт ложно сработать по времени,
+  // которое мы только что сами установили.
   if (!rutubeMessageListenerAttached) {
     rutubeMessageListenerAttached = true;
     window.addEventListener('message', (event) => {
@@ -372,33 +430,61 @@ function createRutubePlayer(container, id, handlers) {
 
       if (data.type === 'player:changeState') {
         const state = data.data && data.data.state;
-        if (state === 'playing') handlers.onPlay(rutubeLastTime);
-        else if (state === 'paused' || state === 'pause') handlers.onPause(rutubeLastTime);
+        if (state === 'playing') { currentPlayer.seekWatcher?.setPlaying(true); handlers.onPlay(rutubeLastTime); }
+        else if (state === 'paused' || state === 'pause') { currentPlayer.seekWatcher?.setPlaying(false); handlers.onPause(rutubeLastTime); }
       } else if (data.type === 'player:currentTime') {
         rutubeLastTime = (data.data && data.data.time) || rutubeLastTime;
+        currentPlayer.seekWatcher?.ingest(rutubeLastTime);
         handlers.onTimeUpdate(rutubeLastTime);
       }
     });
   }
 
-  return {
+  const playerObj = {
     type: 'rutube',
+    seekWatcher,
     play: () => post('player:play'),
     pause: () => post('player:pause'),
-    seekTo: (t) => { rutubeLastTime = t; post('player:setCurrentTime', { time: t }); },
+    seekTo: (t) => { rutubeLastTime = t; seekWatcher.reset(t); post('player:setCurrentTime', { time: t }); },
     getCurrentTime: () => rutubeLastTime
   };
+  return playerObj;
 }
 
+let mountGeneration = 0;
+
 async function mountPlayer(sourceType, payload) {
+  const myGen = ++mountGeneration;
+  const isCurrentGen = (gen) => gen === mountGeneration;
+
+  // Явно показываем, что идёт загрузка — раньше на месте плеера просто
+  // оставалось предыдущее видео, и если новое так и не загружалось
+  // (например, YouTube заблокирован у зрителя), это выглядело как "видео
+  // не переключилось", хотя на самом деле оно молча зависло.
   if (sourceType === 'youtube') {
-    currentPlayer = await createYouTubePlayer(playerContainer, payload, playerHandlers);
-  } else if (sourceType === 'vk') {
-    currentPlayer = createVKPlayer(playerContainer, payload);
-  } else if (sourceType === 'rutube') {
-    currentPlayer = createRutubePlayer(playerContainer, payload, playerHandlers);
-  } else {
-    currentPlayer = createFilePlayer(playerContainer, payload, playerHandlers);
+    playerContainer.innerHTML = '<div class="player-loading">Загружаем YouTube-плеер…</div>';
+  }
+
+  try {
+    let player;
+    if (sourceType === 'youtube') {
+      player = await createYouTubePlayer(playerContainer, payload, playerHandlers, myGen, isCurrentGen);
+    } else if (sourceType === 'vk') {
+      player = createVKPlayer(playerContainer, payload);
+    } else if (sourceType === 'rutube') {
+      player = createRutubePlayer(playerContainer, payload, playerHandlers);
+    } else {
+      player = createFilePlayer(playerContainer, payload, playerHandlers);
+    }
+
+    if (!isCurrentGen(myGen)) return; // подоспел более новый video-source, эта попытка устарела
+    if (player) currentPlayer = player;
+  } catch (err) {
+    if (!isCurrentGen(myGen)) return;
+    playerContainer.innerHTML = sourceType === 'youtube'
+      ? '<div class="player-loading player-error">Не получилось загрузить YouTube-плеер (возможно, заблокирован провайдером). Нажмите «Пересинхронизировать» ниже, чтобы попробовать снова, или попросите ведущего использовать другую ссылку.</div>'
+      : '<div class="player-loading player-error">Не получилось загрузить видео. Попробуйте «Пересинхронизировать» ниже.</div>';
+    rebindTickerEl();
   }
 }
 

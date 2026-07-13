@@ -504,6 +504,23 @@ button:active { transform: scale(0.96); }
   object-fit: contain;
 }
 
+/* ---- Заглушка на время загрузки плеера / сообщение об ошибке подключения ---- */
+.player-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: #d4af37;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.player-loading.player-error {
+  color: #e07a7a;
+}
+
 /* ---- Тонкая "бегущая строка" сообщений под видео ---- */
 .video-ticker {
   position: absolute;
